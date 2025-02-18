@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Distribuição</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+  <style>
+    #chartCanvas,
+    #scatterChartCanvas {
+      width: 90% !important;
+      height: 500px !important;
+      display: block;
+      margin: 40px auto;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 10px;
+      background-color: #ffffff;
+    }
+
+    #headherBarConteiner {
+      background-color: #17426C;
+      display: grid;
+      grid-template-columns: auto auto auto auto;
+      border-radius: 20px;
+      color: #ffffff;
+      font-family: "Montserrat", serif;
+      font-size: 12px;
+      grid-gap: 234px;
+      justify-content: center;
+    }
+
+    #conteinerCharts {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-gap: 10px;
+    }
+
+    .button {
+      background-color: #0386A7;
+      color: white;
+      font-family: "Montserrat", sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.3s, transform 0.2s;
+    }
+
+    .button:hover {
+      background-color: #02627A;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .button:active {
+      transform: translateY(0);
+      box-shadow: none;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <div id="headherBarConteiner">
+      <h3 class="button">Planilhas</h3>
+      <h3 class="button">Relatórios</h3>
+      <h3 class="button">Distribuição</h3>
+      <h3 class="button">Tipos de metodologia</h3>
+    </div>
+  </header>
+
+  <h1 style="font-family:Montserrat, serif;">Personalize sua análise</h1>
+  <input type="file" id="uploadExcel" />
+ 
+  <br /><br />
+  <label for="minOccurrences">Número mínimo de ocorrências:</label>
+  <input type="number" id="minOccurrences" placeholder="Insira o mínimo" value="50" />
+  <button id="alterChart" class="button">Alter</button>
+  <button id="egoChart" class="button">Ego</button>
+  <br /><br />
+  <div id="conteinerCharts">
+    <div style="text-align: center; font-family:Montserrat, serif ;background-color: #17426C; border-radius: 30px;color: #ffffff;">
+      <h3>Distribuição das frequências</h3>
+      <canvas id="chartCanvas"></canvas>
+    </div>
+    <div style="text-align: center; font-family:Montserrat, serif ; background-color: #17426C; border-radius: 30px;color: #ffffff;">
+      <h3>Distribuição dos termos</h3>
+      <canvas id="scatterChartCanvas"></canvas>
+      <button id="showAverage" class="button">Exibir Média</button>
+    </div>
+  </div>
+
+  <script type="module">
+    const firebaseConfig = {
+      apiKey: "AIzaSyCRb_9-yTqNbljp-SKnGKvwSBBQCFoB014",
+      authDomain: "agorasystem-71ad3.firebaseapp.com",
+      databaseURL: "https://agorasystem-71ad3-default-rtdb.firebaseio.com/",
+      projectId: "agorasystem-71ad3",
+      storageBucket: "agorasystem-71ad3.firebasestorage.app",
+      messagingSenderId: "738118215435",
+      appId: "1:738118215435:web:e9e978d462b164a775a40e",
+      measurementId: "G-V3Q5BT8BK4"
+    };
+
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.16.0/firebase-app.js";
+    import { getDatabase, ref, get, child } from "https://www.gstatic.com/firebasejs/9.16.0/firebase-database.js";
+
+    const app = initializeApp(firebaseConfig);
+    const database = getDatabase(app);
+
+    const dbRef = ref(database, '/users/breno_aulus@gmail_com/planilhas/500_xlsx/chunk_0');
+
+    let jsonData = [];
+
+    get(dbRef)
+      .then((snapshot) => {
+        if (snapshot.exists()) {
+          jsonData = snapshot.val();
+          console.log("Dados carregados do Firebase", jsonData);
+        } else {
+          console.log("Nenhum dado disponível no Firebase.");
+        }
+      })
+      .catch((error) => {
+        console.error("Erro ao buscar dados do Firebase:", error);
+      });
+
+    let minOccurrences = 50;
+
+    document.getElementById('uploadExcel').addEventListener('change', handleFile);
+
+    function handleFile(event) {
+      const file = event.target.files[0];
+      const reader = new FileReader();
+
+      reader.onload = function (e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+      };
+
+      reader.readAsArrayBuffer(file);
+    }
+
+    document.getElementById('minOccurrences').addEventListener('input', () => {
+      minOccurrences = parseInt(document.getElementById('minOccurrences').value, 10) || 1;
+
+      const columnInput = document.getElementById('columnInput');
+      const selectedColumns = Array.from(columnInput.selectedOptions).map(option => option.value);
+
+      if (selectedColumns.length > 0 && jsonData.length > 0) {
+        const combinedData = processMultipleColumns(jsonData, selectedColumns);
+
+        const maxOccurrences = Math.max(...Object.values(combinedData.values));
+        if (minOccurrences > maxOccurrences) {
+          alert(`O número mínimo de ocorrências (${minOccurrences}) é maior que o maior elemento possível (${maxOccurrences}).`);
+          return;
+        }
+
+        renderChart(combinedData.labels, combinedData.values);
+        renderScatterChart(combinedData.labels, combinedData.values);
+      }
+    });
+
+    document.getElementById('alterChart').addEventListener('click', () => {
+      const evocColumns = ["EVOC1", "EVOC2", "EVOC3", "EVOC4", "EVOC5"];
+
+      if (jsonData.length > 0) {
+        const evocData = processMultipleColumns(jsonData, evocColumns);
+
+        const maxOccurrences = Math.max(...Object.values(evocData.values));
+        if (minOccurrences > maxOccurrences) {
+          alert(`O número mínimo de ocorrências (${minOccurrences}) é maior que o maior elemento possível (${maxOccurrences}).`);
+          return;
+        }
+
+        renderChart(evocData.labels, evocData.values);
+        renderScatterChart(evocData.labels, evocData.values);
+      } else {
+        alert('Por favor, carregue um arquivo Excel antes de usar esta função.');
+      }
+    });
+
+    document.getElementById('egoChart').addEventListener('click', () => {
+      const evocColumnsEgo = ["EVOC6", "EVOC7", "EVOC8", "EVOC9", "EVOC10"];
+
+      if (jsonData.length > 0) {
+        const evocDataEgo = processMultipleColumns(jsonData, evocColumnsEgo);
+
+        const maxOccurrences = Math.max(...Object.values(evocDataEgo.values));
+        if (minOccurrences > maxOccurrences) {
+          alert(`O número mínimo de ocorrências (${minOccurrences}) é maior que o maior elemento possível (${maxOccurrences}).`);
+          return;
+        }
+
+        renderChart(evocDataEgo.labels, evocDataEgo.values);
+        renderScatterChart(evocDataEgo.labels, evocDataEgo.values);
+      } else {
+        alert('Por favor, carregue um arquivo Excel antes de usar esta função.');
+      }
+    });
+
+    function processMultipleColumns(data, columns) {
+      const counts = {};
+
+      data.forEach(row => {
+        columns.forEach(column => {
+          const value = row[column];
+          if (value !== undefined && value !== "CAMPO_VAZIO") {
+            counts[value] = (counts[value] || 0) + 1;
+          }
+        });
+      });
+
+      const filteredCounts = Object.entries(counts).filter(([key, count]) => count >= minOccurrences);
+
+      return {
+        labels: filteredCounts.map(([key]) => key),
+        values: filteredCounts.map(([, count]) => count)
+      };
+    }
+
+    function renderChart(labels, values) {
+      const ctx = document.getElementById('chartCanvas').getContext('2d');
+      if (window.chart) {
+        window.chart.destroy();
+      }
+      window.chart = new Chart(ctx, {
+        type: 'pie',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Ocorrências',
+            data: values,
+            backgroundColor: [
+              'rgba(255, 99, 132, 0.6)',
+              'rgba(54, 162, 235, 0.6)',
+              'rgba(255, 206, 86, 0.6)',
+              'rgba(75, 192, 192, 0.6)',
+              'rgba(153, 102, 255, 0.6)',
+              'rgba(255, 159, 64, 0.6)'
+            ],
+            borderColor: [
+              'rgba(255, 99, 132, 1)',
+              'rgba(54, 162, 235, 1)',
+              'rgba(255, 206, 86, 1)',
+              'rgba(75, 192, 192, 1)',
+              'rgba(153, 102, 255, 1)',
+              'rgba(255, 159, 64, 1)'
+            ],
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              position: 'top',
+            },
+            tooltip: {
+              callbacks: {
+                label: function (tooltipItem) {
+                  const label = tooltipItem.label || '';
+                  const value = tooltipItem.raw || 0;
+                  return `${label}: ${value} ocorrência(s)`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function renderScatterChart(labels, values) {
+      const scatterData = labels.map((label, index) => ({
+        x: index + 1,
+        y: values[index],
+        label: label
+      }));
+
+      const ctx = document.getElementById('scatterChartCanvas').getContext('2d');
+      if (window.scatterChart) {
+        window.scatterChart.destroy();
+      }
+
+      window.scatterChart = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+          datasets: [{
+            label: 'Dispersão de Ocorrências',
+            data: scatterData,
+            backgroundColor: 'rgba(54, 162, 235, 0.6)',
+            borderColor: 'rgba(54, 162, 235, 1)',
+            borderWidth: 1,
+            pointRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              position: 'top',
+            },
+            tooltip: {
+              callbacks: {
+                label: function (tooltipItem) {
+                  const pointData = tooltipItem.raw;
+                  return `${pointData.label}: ${pointData.y} ocorrência(s)`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              type: 'linear',
+              position: 'bottom',
+              title: {
+                display: true,
+                text: 'Índice'
+              },
+              ticks: {
+                stepSize: 1
+              }
+            },
+            y: {
+              title: {
+                display: true,
+                text: 'Ocorrências'
+              },
+              beginAtZero: true
+            }
+          }
+        }
+      });
+    }
+
+    function calculateAverage(values) {
+      const sum = values.reduce((acc, value) => acc + value, 0);
+      return sum / values.length;
+    }
+
+    document.getElementById('showAverage').addEventListener('click', () => {
+      if (window.scatterChart) {
+        const values = window.scatterChart.data.datasets[0].data.map(point => point.y);
+        const average = calculateAverage(values);
+
+        if (!window.scatterChart.data.datasets[1]) {
+          window.scatterChart.data.datasets.push({
+            label: 'Média',
+            data: [{ x: 0, y: average }, { x: values.length, y: average }],
+            borderColor: 'rgba(255, 99, 132, 0.8)',
+            borderWidth: 2,
+            type: 'line',
+            fill: false,
+            pointRadius: 0
+          });
+        } else {
+          window.scatterChart.data.datasets[1].data = [
+            { x: 0, y: average },
+            { x: values.length, y: average }
+          ];
+        }
+
+        window.scatterChart.update();
+      } else {
+        alert('Por favor, gere o gráfico Scatter primeiro.');
+      }
+    });
+  </script>
+</body>
+
+</html>

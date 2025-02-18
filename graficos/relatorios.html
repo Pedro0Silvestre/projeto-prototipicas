@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="pt">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quadrante de Vergès</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: "Montserrat", sans-serif;
+      text-align: center;
+      background-color: #f4f4f4;
+    }
+
+    h1 {
+      color: #17426C;
+    }
+
+    table {
+      width: 80%;
+      margin: 20px auto;
+      border-collapse: collapse;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    th, td {
+      border: 1px solid #ddd;
+      padding: 10px;
+      text-align: center;
+    }
+
+    th {
+      background: #17426C;
+      color: white;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Quadrante de Vergès</h1>
+
+  <label for="minFreq">Frequência mínima:</label>
+  <input type="number" id="minFreq" value="0" />
+
+  <label for="maxOME">OME máxima:</label>
+  <input type="number" id="maxOME" value="10" />
+
+  <label for="quadranteFiltro">Quadrante:</label>
+  <select id="quadranteFiltro">
+    <option value="Todos">Todos</option>
+    <option value="Núcleo Central">Núcleo Central</option>
+    <option value="Zona Periférica Superior">Zona Periférica Superior</option>
+    <option value="Zona Periférica Inferior">Zona Periférica Inferior</option>
+    <option value="Zona Contraste">Zona Contraste</option>
+  </select>
+  
+  <button onclick="filtrarTabela()" style="background-color: #0386A7;
+  color: white;font-family: Montserrat, sans-serif;font-size: 14px;font-weight: 600;padding: 10px 20px;border: none;border-radius: 8px;cursor: pointer;transition: background-color 0.3s, transform 0.2s;">Gerar Tabela</button>
+
+  <table id="omeTable">
+    <thead>
+      <tr>
+        <th>Termo</th>
+        <th>Frequência</th>
+        <th>OME</th>
+        <th>Quadrante</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Dados serão inseridos aqui -->
+    </tbody>
+  </table>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.16.0/firebase-app.js";
+    import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/9.16.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCRb_9-yTqNbljp-SKnGKvwSBBQCFoB014",
+      authDomain: "agorasystem-71ad3.firebaseapp.com",
+      databaseURL: "https://agorasystem-71ad3-default-rtdb.firebaseio.com/",
+      projectId: "agorasystem-71ad3",
+      storageBucket: "agorasystem-71ad3.firebasestorage.app",
+      messagingSenderId: "738118215435",
+      appId: "1:738118215435:web:e9e978d462b164a775a40e",
+      measurementId: "G-V3Q5BT8BK4"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const database = getDatabase(app);
+    const dbRef = ref(database, '/users/breno_aulus@gmail_com/planilhas/500_xlsx/chunk_0');
+    let resultados = [];
+
+    async function carregarDados() {
+      const snapshot = await get(dbRef);
+      if (!snapshot.exists()) {
+        alert("Nenhum dado disponível.");
+        return;
+      }
+      const jsonData = snapshot.val();
+      processarDados(jsonData);
+    }
+
+    function processarDados(data) {
+      resultados = [];
+      let termosFrequencia = {};
+      const evocColumns = ["EVOC1", "EVOC2", "EVOC3", "EVOC4", "EVOC5", "EVOC6", "EVOC7", "EVOC8", "EVOC9", "EVOC10"];
+
+      data.forEach(pessoa => {
+        evocColumns.forEach((coluna, index) => {
+          const termo = pessoa[coluna];
+          if (termo && termo !== "CAMPO_VAZIO") {
+            if (!termosFrequencia[termo]) {
+              termosFrequencia[termo] = { frequencia: 0, posicoes: [] };
+            }
+            termosFrequencia[termo].frequencia += 1;
+            termosFrequencia[termo].posicoes.push(index + 1);
+          }
+        });
+      });
+
+      for (let termo in termosFrequencia) {
+        let somaPosicoes = termosFrequencia[termo].posicoes.reduce((acc, val) => acc + val, 0);
+        let ome = somaPosicoes / termosFrequencia[termo].frequencia;
+        let quadrante = definirQuadrante(termosFrequencia[termo].frequencia, ome);
+
+        resultados.push({ termo, frequencia: termosFrequencia[termo].frequencia, ome, quadrante });
+      }
+
+      exibirTabela(resultados);
+    }
+
+    function definirQuadrante(freq, ome) {
+      if (freq >= 3 && ome <= 5) return "Núcleo Central";
+      if (freq >= 3 && ome > 5) return "Zona Periférica Superior";
+      if (freq < 3 && ome <= 5) return "Zona Periférica Inferior";
+      return "Zona Contraste";
+    }
+
+    window.filtrarTabela = function() {
+      const minFreq = parseInt(document.getElementById("minFreq").value);
+      const maxOME = parseFloat(document.getElementById("maxOME").value);
+      const quadranteFiltro = document.getElementById("quadranteFiltro").value;
+
+      const dadosFiltrados = resultados.filter(item =>
+        item.frequencia >= minFreq && item.ome <= maxOME && (quadranteFiltro === "Todos" || item.quadrante === quadranteFiltro)
+      );
+
+      exibirTabela(dadosFiltrados);
+    };
+
+    function exibirTabela(dados) {
+      let tabelaBody = document.querySelector("#omeTable tbody");
+      tabelaBody.innerHTML = "";
+      dados.forEach(({ termo, frequencia, ome, quadrante }) => {
+        let row = `<tr><td>${termo}</td><td>${frequencia}</td><td>${ome.toFixed(2)}</td><td>${quadrante}</td></tr>`;
+        tabelaBody.innerHTML += row;
+      });
+    }
+
+    carregarDados();
+  </script>
+</body>
+</html>
